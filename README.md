@@ -1,6 +1,6 @@
 # Want to Retire
 
-A pre-registered forward test of LLM trading decisions in crypto markets, with non-LLM baselines and a tamper-evident log.
+A year-long, pre-registered forward test of LLM trading decisions in crypto markets. The evaluation spec is frozen and externally timestamped before launch. LLM, numeric and hybrid arms run side by side on the same data, execution and risk layers. A hash-chain head is published and externally anchored every day, so anyone can check that no result was cherry-picked or rewritten.
 
 > Research demonstration only. Not investment advice.
 > 研究演示，不构成投资建议。
@@ -15,7 +15,7 @@ The system itself must not leak the future either. Every data record carries the
 
 ## Experiment
 
-Four arms share the same data, simulator, fee model, risk limits and log. Only the decision module differs.
+Five arms share the same data, simulator, fee model, risk limits and log. Only the decision module differs.
 
 | Arm | Decision maker |
 |---|---|
@@ -23,8 +23,9 @@ Four arms share the same data, simulator, fee model, risk limits and log. Only t
 | A | Numeric strategy (gplearn, LightGBM, hand-built factors), no LLM |
 | B | An LLM decides directly |
 | C | Numeric signals, with an LLM that can veto or adjust them |
+| J | Arm A's target weights, applied only when a calibrated probability model (Jev) puts the chance that the rebalance beats holding above a preset threshold |
 
-B and C use a single DeepSeek model, used as released without fine-tuning. The exact model build is recorded with every decision. Every arm returns the same output: target portfolio weights, a rationale and a confidence ([ADR 0001](docs/adr/0001-decision-output-target-weights.md)).
+B and C use a DeepSeek model through its public API, as released and without fine-tuning. The API does not pin model versions, so each call records the version identifiers the API returns, a daily probe watches for silent model changes, and results are reported separately for each model version. Every arm returns the same output: target portfolio weights, a rationale and a confidence ([ADR 0001](docs/adr/0001-decision-output-target-weights.md)).
 
 ## Safeguards
 
@@ -32,8 +33,8 @@ B and C use a single DeepSeek model, used as released without fine-tuning. The e
 |---|---|
 | A decision at time *t* gets a snapshot of the data available by *t*, and nothing else ([ADR 0002](docs/adr/0002-point-in-time-data.md)) | The system leaking future data |
 | Decision modules receive a snapshot and return a decision. They cannot modify the risk limits, the log or the evaluation code | A strategy, or a later self-improvement loop, changing how it is judged |
-| Every event is appended to a hash chain | Results being edited after the fact without anyone noticing |
-| The evaluation spec is frozen before the forward test starts and is not changed afterwards | Metrics chosen after seeing the results |
+| Every event is appended to a hash chain, and the chain head is published and externally timestamped every day | Results being edited after the fact without anyone noticing |
+| The evaluation spec is frozen and externally timestamped before the forward test starts, and is not changed afterwards | Metrics chosen after seeing the results |
 | A running strategy never changes itself. An improvement becomes a new frozen version and enters the test as a new candidate | Results that mix versions |
 
 ## Scope of v1
