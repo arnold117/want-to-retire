@@ -1,6 +1,6 @@
 # Want to Retire
 
-A year-long, pre-registered forward test of LLM trading decisions in crypto markets. The evaluation spec is frozen and externally timestamped before launch. LLM, numeric and hybrid arms run side by side on the same data, execution and risk layers. A hash-chain head is published and externally anchored every day, so anyone can check that no result was cherry-picked or rewritten.
+A year-long, pre-registered forward test of LLM trading decisions in crypto markets. The evaluation spec is frozen and externally timestamped before launch. LLM, numeric and hybrid arms run side by side on the same data, execution and risk layers. A hash-chain head is published and externally anchored every day, so anyone can check that results were not rewritten after the fact.
 
 > Research demonstration only. Not investment advice.
 > 研究演示，不构成投资建议。
@@ -23,9 +23,9 @@ Five arms share the same data, simulator, fee model, risk limits and log. Only t
 | A | Numeric strategy (gplearn, LightGBM, hand-built factors), no LLM |
 | B | An LLM decides directly |
 | C | Numeric signals, with an LLM that can veto or adjust them |
-| J | Arm A's target weights, applied only when a calibrated probability model (Jev) puts the chance that the rebalance beats holding above a preset threshold |
+| J | Arm A's target weights, applied only when a probability model (Jev) puts the chance that the rebalance beats holding above a preset threshold |
 
-B and C use a DeepSeek model through its public API, as released and without fine-tuning. The API does not pin model versions, so each call records the version identifiers the API returns, a daily probe watches for silent model changes, and results are reported separately for each model version. Every arm returns the same output: target portfolio weights, a rationale and a confidence ([ADR 0001](docs/adr/0001-decision-output-target-weights.md)).
+B and C use a DeepSeek model through its public API, as released and without fine-tuning. The API does not pin model versions, so each call records the version identifiers the API returns, and a daily probe watches for silent model changes. The main results describe each arm as it actually ran, including any model changes made by the provider; results for individual model versions are exploratory. Every arm returns the same output: target portfolio weights, a rationale and a confidence ([ADR 0001](docs/adr/0001-decision-output-target-weights.md)).
 
 ## Safeguards
 
