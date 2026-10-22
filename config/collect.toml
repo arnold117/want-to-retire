@@ -1,0 +1,35 @@
+# Collector configuration. Changing the universe rule means a new ADR (ADR 0003).
+
+[universe]
+size = 20
+lookback_days = 30
+# Stablecoins and other pegged assets (fiat, gold) are not candidates.
+pegged = ["AEUR", "BFUSD", "BUSD", "DAI", "EUR", "EURI", "FDUSD", "PAXG", "RLUSD", "RWUSD", "TUSD", "USD1", "USDC", "USDE", "USDEB", "USDP", "USDS", "XAUT", "XUSD"]
+# Exact base assets; matching by suffix would catch JUP and SYRUP. None are listed on Binance as of 2026-10.
+leveraged = []
+perp_prefixes = ["1000000", "1000", "1M"]
+
+[endpoints]
+spot_ws = "wss://data-stream.binance.vision/stream?streams="
+um_public_ws = "wss://fstream.binance.com/public/stream?streams="
+um_market_ws = "wss://fstream.binance.com/market/stream?streams="
+spot_rest = "https://data-api.binance.vision"
+um_rest = "https://fapi.binance.com"
+
+[collect]
+rotate_after_s = 85800          # 23h50m; Binance drops connections at 24h
+backoff_max_s = 60
+fsync_every_s = 5
+rollover_grace_s = 30           # close last hour's files 30s after the hour, so in-flight REST writes land
+silence_s = { depth20 = 120, markPrice = 120, kline_1m = 180 }
+open_interest_every_s = 60
+exchange_info_every_s = 3600
+backfill_every_s = 300
+backfill_window_s = 7200
+backfill_grace_s = { kline_1m = 120, kline_1h = 300, kline_4h = 300 }
+heartbeat_every_s = 60
+clock_max_offset_ms = 100
+disk_max_used = 0.8
+
+[seal]
+keep_days = 7
