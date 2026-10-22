@@ -24,3 +24,9 @@ The execution layer turns the gap between target and current weights into orders
 - An LLM only has to choose direction and size.
 - Execution intent, such as resting a limit order or waiting for a better price, cannot be expressed.
 - Adding an optional hints field later is cheap. Switching to order-level output would mean rewriting the execution layer and every arm's adapter.
+
+## Amendment, 2026-10-22
+
+A fifth arm, J, was added after this record was accepted. J applies arm A's target weights only when a probability model (Jev) puts the chance that the rebalance beats holding above a preset threshold. It returns the same three fields.
+
+Jev returns probabilities for a set of answers but no text explanation. For arm J, `rationale` may therefore be structured JSON: the question asked and the probability of each answer. For every other arm it stays text.
