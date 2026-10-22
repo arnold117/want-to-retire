@@ -30,3 +30,9 @@ The execution layer turns the gap between target and current weights into orders
 A fifth arm, J, was added after this record was accepted. J applies arm A's target weights only when a probability model (Jev) puts the chance that the rebalance beats holding above a preset threshold. It returns the same three fields.
 
 Jev returns probabilities for a set of answers but no text explanation. For arm J, `rationale` may therefore be structured JSON: the question asked and the probability of each answer. For every other arm it stays text.
+
+## Amendment, 2026-10-22: holding
+
+`weights` may be `null`, meaning "keep the current holdings". The shared layers then use the current holdings, valued at the prices used for execution, as the target. Risk limits still apply: a coin that has left the universe is still sold, and a position above the cap is still cut.
+
+Without this, an arm that wants to hold has to report its current weights, computed at snapshot prices. Prices move before execution, so the reported weights no longer match the holdings and small trades follow. A timed-out or invalid decision is treated the same way as `null`.

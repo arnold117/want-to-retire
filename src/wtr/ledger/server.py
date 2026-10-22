@@ -1,6 +1,6 @@
 """Ledger process wtr-ledger, the only writer of the chain (PRD S5 L1).
 Protocol: one JSON line {"type", "payload"} in, one line {"seq", "hash"} or {"error"} out. Acked = written and fsynced.
-Usage: python -m wtr.ledger.server --root DATA --socket PATH [--secrets-dir /etc/wtr]"""
+Usage: python -m wtr.ledger.server --root DATA --socket PATH [--secrets /etc/wtr]"""
 import argparse
 import asyncio
 import json
@@ -18,16 +18,23 @@ log = logging.getLogger("wtr.ledger")
 ABS_PATH = re.compile(r"""(?:^|[\s"'=:(])/(?:etc|home|Users|root|var|tmp|opt|srv|private|run|usr|mnt)/""")
 
 
-def load_secrets(d: Path | None) -> set[str]:
-    if d is None or not d.is_dir():
+def load_secrets(path: Path | None) -> set[str]:
+    """Secret values from a file or every file in a directory; `KEY=VALUE` lines contribute VALUE."""
+    if path is None or not path.exists():
         return set()
     vals = set()
-    for p in d.rglob("*"):
-        if p.is_file():
-            try:
-                vals |= {v.strip() for v in p.read_text().splitlines() if len(v.strip()) >= 8}
-            except (OSError, UnicodeDecodeError):
-                pass
+    for p in [path] if path.is_file() else [p for p in path.rglob("*") if p.is_file()]:
+        try:
+            lines = p.read_text().splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for v in lines:
+            v = v.strip()
+            if v.startswith("#"):
+                continue
+            v = v.split("=", 1)[1].strip() if "=" in v and not v.startswith("-----") else v
+            if len(v) >= 8:
+                vals.add(v)
     return vals
 
 
@@ -104,10 +111,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--socket", type=Path, required=True)
-    ap.add_argument("--secrets-dir", type=Path, default=Path("/etc/wtr"))
+    ap.add_argument("--secrets", type=Path, default=Path("/etc/wtr"), help="file or directory of secret values")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    asyncio.run(serve(a.root, a.socket, load_secrets(a.secrets_dir)))
+    asyncio.run(serve(a.root, a.socket, load_secrets(a.secrets)))
 
 
 if __name__ == "__main__":

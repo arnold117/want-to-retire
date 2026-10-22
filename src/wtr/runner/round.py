@@ -14,6 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from wtr.contracts import canonical
+from wtr.gateway import server as gw
 from wtr.ledger import chain, client
 from wtr.pit import snapshot as pit
 from wtr.risk.clip import clip
@@ -23,6 +24,7 @@ REPO = Path(__file__).resolve().parents[3]
 CLOSE_TO_T_NS = 30 * 10**9
 CLOSE_TO_DEADLINE_NS = 600 * 10**9
 MAX_OUTPUT = 64 * 1024
+GATEWAY_PORT = 8787
 
 
 def strs(x):
@@ -44,12 +46,18 @@ def validate(stdout: bytes, pool: list[str], arm: str) -> tuple[dict | None, str
         return None, "output over 64KB"
     try:
         d = json.loads(stdout, parse_float=Decimal, parse_constant=_reject_constant)
-        w = {k: Decimal(v) for k, v in d["weights"].items()}
+        w = None if d["weights"] is None else {k: Decimal(v) for k, v in d["weights"].items()}
         conf = Decimal(d["confidence"])
         rationale = d["rationale"]
     except (ValueError, KeyError, TypeError, AttributeError, ArithmeticError) as e:
         return None, f"unreadable: {e}"
-    if isinstance(d["weights"], dict) and any(isinstance(v, bool) for v in d["weights"].values()):
+    if not (isinstance(rationale, str) or (arm == "J" and isinstance(rationale, (dict, list)))):
+        return None, "rationale must be text"
+    if not (conf.is_finite() and 0 <= conf <= 1):
+        return None, "confidence must be in [0, 1]"
+    if w is None:
+        return {"weights": None, "rationale": rationale, "confidence": conf}, "ok"  # hold (ADR 0001 amendment)
+    if any(isinstance(v, bool) for v in d["weights"].values()):
         return None, "boolean weight"
     if unknown := sorted(set(w) - set(pool) - {"CASH"}):
         return None, f"unknown symbols {unknown}"
@@ -57,10 +65,6 @@ def validate(stdout: bytes, pool: list[str], arm: str) -> tuple[dict | None, str
         return None, "weights must be finite and non-negative"
     if abs(sum(w.values(), Decimal(0)) - 1) > Decimal("1e-6"):
         return None, "weights must sum to 1"
-    if not (isinstance(rationale, str) or (arm == "J" and isinstance(rationale, (dict, list)))):
-        return None, "rationale must be text"
-    if not (conf.is_finite() and 0 <= conf <= 1):
-        return None, "confidence must be in [0, 1]"
     return {"weights": w, "rationale": rationale, "confidence": conf}, "ok"
 
 
@@ -77,7 +81,7 @@ def holdings(root: Path, arm: str, t: int) -> dict[str, Decimal]:
     return {s: Decimal(q) for s, q in pit.holdings_at(root, arm, t).items()}
 
 
-def run_round(root: Path, sock: Path, t: int, arms: dict) -> None:
+def run_round(root: Path, sock: Path, t: int, arms: dict, gateway: Path | None = None) -> None:
     def log(type_: str, payload: dict) -> dict:
         return client.append(sock, type_, strs(payload))
 
@@ -103,15 +107,22 @@ def run_round(root: Path, sock: Path, t: int, arms: dict) -> None:
         if late:
             log("watermark_timeout", {"arm": arm, "t": t, "channels": late})
         budget = (deadline - time.time_ns()) / 1e9 if live else 600
+        if gateway:
+            gw.control(gateway, {"op": "register", "token": token, "arm": arm, "t": t,
+                                 "deadline": deadline if live else time.time_ns() + 600 * 10**9})
+        env = {"PATH": "/usr/bin:/bin", "WTR_GATEWAY_URL": f"http://127.0.0.1:{GATEWAY_PORT}/v1/chat/completions"}  # nothing else, no keys
         try:
-            p = subprocess.run([sys.executable, str(REPO / cfg["entry"])], input=canonical.dumps(snap),
+            p = subprocess.run([sys.executable, str(REPO / cfg["entry"])], input=canonical.dumps(snap), env=env,
                                capture_output=True, timeout=max(budget, 0.001), cwd=REPO / Path(cfg["entry"]).parent)
             decision, status = validate(p.stdout, pool["spot"], arm) if p.returncode == 0 else (None, f"exit code {p.returncode}")
             output = p.stdout[:MAX_OUTPUT].decode(errors="replace")
         except subprocess.TimeoutExpired:
             decision, status, output = None, "timeout", ""
+        if status != "ok":
+            print(f"{arm}: {status}; stderr: {p.stderr.decode(errors='replace')[-2000:] if status != 'timeout' else ''}", file=sys.stderr)
+        llm_calls = gw.control(gateway, {"op": "close", "token": token})["seqs"] if gateway else []
         log("decision", {"arm": arm, "t": t, "version": cfg["version"], "snapshot_hash": h, "snapshot_seq": snap_ev["seq"],
-                         "status": status, "output": strs(decision) if decision else output})
+                         "status": status, "output": strs(decision) if decision else output, "llm_calls": llm_calls})
         decisions[arm] = decision
 
     if live:
@@ -126,7 +137,7 @@ def run_round(root: Path, sock: Path, t: int, arms: dict) -> None:
     for arm in arms:
         h0 = holdings(root, arm, t)
         d = decisions[arm]
-        target = d["weights"] if d else fill.current_weights(h0, prices)  # hold: current holdings at fill-time prices
+        target = d["weights"] if d and d["weights"] is not None else fill.current_weights(h0, prices)  # hold: current holdings at fill-time prices
         clipped, rules_hit = clip(target, pool["spot"])
         if rules_hit:
             log("risk_clip", {"arm": arm, "t": t, "before": target, "after": clipped, "rules": rules_hit})
@@ -156,13 +167,14 @@ def main() -> None:
     ap.add_argument("--t", type=pit.parse_t)
     ap.add_argument("--value-hour", type=pit.parse_t)
     ap.add_argument("--arms", default="A0")
+    ap.add_argument("--gateway", type=Path, help="gateway control socket; needed for LLM arms")
     a = ap.parse_args()
     cfg = tomllib.loads((REPO / "config" / "arms.toml").read_text())
     arms = {k: cfg[k] for k in a.arms.split(",")}
     if a.value_hour:
         value_hour(a.root, a.ledger, a.value_hour, list(arms))
     else:
-        run_round(a.root, a.ledger, a.t, arms)
+        run_round(a.root, a.ledger, a.t, arms, a.gateway)
 
 
 if __name__ == "__main__":

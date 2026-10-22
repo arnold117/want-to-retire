@@ -24,6 +24,8 @@ def test_validate_rejects_malformed_decisions():
     for b in bad:
         assert validate(b, POOL, "B")[0] is None, b[:60]
     assert validate(json.dumps(ok | {"rationale": {"q": "?", "p": [0.6, 0.4]}}).encode(), POOL, "J")[1] == "ok"
+    hold, status = validate(json.dumps(ok | {"weights": None}).encode(), POOL, "B")
+    assert status == "ok" and hold["weights"] is None
 
 
 def test_circuit_breaker(tmp_path):

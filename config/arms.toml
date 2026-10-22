@@ -3,3 +3,8 @@
 entry = "strategies/a0/main.py"
 spec = "config/specs/a0.json"
 version = "a0-dev"
+
+[B]
+entry = "strategies/b/main.py"
+spec = "config/specs/b.json"
+version = "b-dev"
