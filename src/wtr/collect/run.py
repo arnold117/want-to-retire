@@ -150,13 +150,17 @@ class Collector:
                 cur.cancel()
 
     # --- periodic tasks
-    async def every(self, seconds: float, fn) -> None:
+    async def every(self, seconds: float, fn, offset: float | None = None) -> None:
+        """Run fn every `seconds`; with `offset`, at that many seconds past each multiple of `seconds` (wall clock)."""
         while True:
+            if offset is not None:
+                await asyncio.sleep((offset - time.time()) % seconds)
             try:
                 await fn()
             except Exception:
                 log.exception("%s failed", fn.__name__)
-            await asyncio.sleep(seconds)
+            if offset is None:
+                await asyncio.sleep(seconds)
 
     async def files_tick(self) -> None:
         n = 0
@@ -260,7 +264,8 @@ class Collector:
             loop.add_signal_handler(s, stop.set)
         tasks = [asyncio.create_task(self.slot(n)) for n in SLOTS] + [
             asyncio.create_task(self.files_tick()),
-            asyncio.create_task(self.every(self.c["open_interest_every_s"], self.open_interest)),
+            # polled just after :30 so a snapshot at t (hh:00:30) passes its watermark within seconds
+            asyncio.create_task(self.every(self.c["open_interest_every_s"], self.open_interest, offset=31)),
             asyncio.create_task(self.every(self.c["exchange_info_every_s"], self.exchange_info)),
             asyncio.create_task(self.every(self.c["heartbeat_every_s"], self.monitor)),
             asyncio.create_task(self.every(self.c["backfill_every_s"], self.backfill)),

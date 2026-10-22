@@ -1,0 +1,8 @@
+[
+ ["spot", "kline_4h", "4h", "30d", "native"],
+ ["spot", "kline_1h", "1h", "7d", "native"],
+ ["um", "markPrice", "1h", "7d", "last"],
+ ["um", "openInterest", "1h", "7d", "last"],
+ ["spot", "depth20", "0", "1m", "last"],
+ ["um", "forceOrder", "0", "4h", "all"]
+]
