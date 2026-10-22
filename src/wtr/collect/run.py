@@ -47,6 +47,7 @@ class Collector:
         self.last_seen: dict[tuple[str, str], int] = {}  # (market, stream) -> mono_ns
         self.halted: set[tuple[str, str]] = set()
         self.clock_samples: list[int] = []  # E - available_ts, ns
+        self.rest_slots = asyncio.Semaphore(4)  # 20 parallel TLS handshakes per minute lost ~25% of open-interest polls
         self.load_universe()
 
     # --- universe and streams
@@ -97,7 +98,8 @@ class Collector:
         self.writer.write(market, channel, envelope.make(ts, conn_id, "live", "ws", stream, raw))
 
     async def get(self, market: str, channel: str, base: str, path: str, source: str = "live") -> str:
-        ts, status, body = await asyncio.to_thread(rest.get, base + path)
+        async with self.rest_slots:
+            ts, status, body = await asyncio.to_thread(rest.get, base + path)
         self.writer.write(market, channel, envelope.make(ts, "rest", source, "rest", "GET " + path, body, status))
         if status != 200:
             log.warning("GET %s -> %s", path, status)
