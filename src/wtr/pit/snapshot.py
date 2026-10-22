@@ -147,14 +147,15 @@ def pool_at(root: Path, t: int) -> dict:
 
 
 def holdings_at(root: Path, arm: str, t: int) -> dict:
+    """Holdings from the last `position` whose logical time is strictly before t: a round's own fills (logged with
+    the same t, after t) must not leak into its snapshot when it is rebuilt later."""
     from wtr.ledger import chain  # ponytail: scans the whole chain; keep a per-arm index once the chain is large
-    h = INITIAL_HOLDINGS
+    h, best = INITIAL_HOLDINGS, -1
     for _, _, line in chain.events(root):
-        ev = json.loads(line)
-        if ev["ts"] > t:
-            break
-        if ev["type"] == "position" and ev["payload"].get("arm") == arm:
-            h = ev["payload"]["holdings"]
+        if '"type":"position"' in line:
+            p = json.loads(line)["payload"]
+            if p.get("arm") == arm and best <= p["t"] < t:  # latest logical time wins, not latest written
+                h, best = p["holdings"], p["t"]
     return h
 
 

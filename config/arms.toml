@@ -1,0 +1,5 @@
+# Arms run each round. `version` becomes the S6 version ID once versions are frozen.
+[A0]
+entry = "strategies/a0/main.py"
+spec = "config/specs/a0.json"
+version = "a0-dev"

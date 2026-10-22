@@ -254,6 +254,7 @@ class Collector:
         self.event("universe_loaded", {"universe_sha256": self.universe_sha})
         for e in self.rotate.values():
             e.set()
+        asyncio.get_running_loop().create_task(self.exchange_info())  # rules for new coins before the next round
 
     async def run(self) -> None:
         cfg_bytes = universe.CONFIG.read_bytes()
